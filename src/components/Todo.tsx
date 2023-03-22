@@ -9,6 +9,69 @@ type TodoProps = {
 export function Todo({ todo }: TodoProps) {
     const { id, text, done } = todo;
 
+    const trcp = api.useContext();
+
+    const { mutate: doneMutation } = api.todo.toggle.useMutation({
+        onMutate: async ({ id, done }) => {
+            // Cancel any outgoing refetches (so they don't overwrite our optimistic update)
+            await trcp.todo.all.cancel();
+
+            // Snapshot the previous value
+            const previousTodos = trcp.todo.all.getData();
+
+            // Optimistically update to the new value
+            trcp.todo.all.setData(undefined, (prev) => {
+                if (!prev) return previousTodos;
+                return prev.map((t) => {
+                    if (t.id === id) {
+                        return {
+                            ...t,
+                            done,
+                        };
+                    }
+                    return t;
+                });
+            });
+
+            return { previousTodos };
+        },
+        onSuccess: (err, { done }) => {
+            done && toast.success("Todo completed 🎉🥳🎉");
+        },
+        onError: (err, newTodo, context) => {
+            toast.error(
+                `An error occures when setting a todo to ${
+                    done ? "done" : "undone"
+                }`
+            );
+            trcp.todo.all.setData(undefined, () => context?.previousTodos);
+        },
+        onSettled: async () => await trcp.todo.all.invalidate(),
+    });
+
+    const { mutate: deleteMutation } = api.todo.delete.useMutation({
+        onMutate: async (deleteId) => {
+            // Cancel any outgoing refetches (so they don't overwrite our optimistic update)
+            await trcp.todo.all.cancel();
+
+            // Snapshot the previous value
+            const previousTodos = trcp.todo.all.getData();
+
+            // Optimistically update to the new value
+            trcp.todo.all.setData(undefined, (prev) => {
+                if (!prev) return previousTodos;
+                return prev.filter((t) => t.id !== deleteId);
+            });
+
+            return { previousTodos };
+        },
+        onError: (err, newTodo, context) => {
+            toast.error("An error occures when deleting a todo");
+            trcp.todo.all.setData(undefined, () => context?.previousTodos);
+        },
+        onSettled: async () => await trcp.todo.all.invalidate(),
+    });
+
     return (
         <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
@@ -17,10 +80,10 @@ export function Todo({ todo }: TodoProps) {
                     type="checkbox"
                     name="done"
                     id={id}
-					checked={done}
-                    onChange={(e) => {
-                        // doneMutation({ id, done: e.target.checked });
-                    }}
+                    checked={done}
+                    onChange={(e) =>
+                        doneMutation({ id, done: e.target.checked })
+                    }
                 />
                 <label
                     htmlFor={id}
@@ -31,9 +94,7 @@ export function Todo({ todo }: TodoProps) {
             </div>
             <button
                 className="w-full rounded-lg bg-blue-700 px-2 py-1 text-center text-sm font-medium text-white hover:bg-blue-800 focus:outline-none focus:ring-4 focus:ring-blue-300 dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800 sm:w-auto"
-                onClick={() => {
-                    console.log("delete", id);
-                }}
+                onClick={() => deleteMutation(id)}
             >
                 Delete
             </button>

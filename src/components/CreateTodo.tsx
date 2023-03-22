@@ -5,6 +5,42 @@ import { toast } from "react-hot-toast";
 
 export default function CreateTodo() {
     const [newTodo, setNewTodo] = useState("");
+
+    const trcp = api.useContext();
+
+    const { mutate } = api.todo.create.useMutation({
+        onMutate: async (newTodo) => {
+            // Cancel any outgoing refetches (so they don't overwrite our optimistic update)
+            await trcp.todo.all.cancel();
+
+            // Snapshot the previous value
+            const previousTodos = trcp.todo.all.getData();
+
+            // Optimistically update to the new value
+            trcp.todo.all.setData(undefined, (prev) => {
+                const optimisticTodos = {
+                    id: "optimistic-todo-id",
+                    text: newTodo,
+                    done: false,
+                };
+                if (!prev) return [optimisticTodos];
+                return [...prev, optimisticTodos];
+            });
+
+            setNewTodo("");
+
+            return { previousTodos };
+        },
+        onError: (err, newTodo, context) => {
+            toast.error("An error occures when creating a todo");
+            setNewTodo(newTodo)
+            trcp.todo.all.setData(undefined, () => context?.previousTodos);
+        },
+        onSettled: async () => {
+            await trcp.todo.all.invalidate();
+        },
+    });
+
     return (
         <div>
             <form
@@ -17,6 +53,8 @@ export default function CreateTodo() {
                         toast.error(result.error.format()._errors.join("\n"));
                         return;
                     }
+
+                    mutate(newTodo);
                 }}
                 className="flex gap-2"
             >

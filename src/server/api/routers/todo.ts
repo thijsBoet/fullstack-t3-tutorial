@@ -1,3 +1,4 @@
+import { TRPCError } from '@trpc/server';
 import { z } from "zod";
 
 import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
@@ -11,23 +12,7 @@ export const todoRouter = createTRPCRouter({
             },
         });
 
-        console.log(
-            "Todos from prisma",
-            todos.map(({ id, text, done }) => ({ id, text, done }))
-        );
-
-        return [
-            {
-                id: "1",
-                text: "dummy text",
-                done: false,
-            },
-            {
-                id: "2",
-                text: "dummy text2",
-                done: true,
-            },
-        ];
+        return todos.map(({ id, text, done }) => ({ id, text, done }));
     }),
 
     create: protectedProcedure
